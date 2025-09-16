@@ -1,0 +1,227 @@
+import React, { useState, useMemo } from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Filter } from "lucide-react";
+
+interface RowAnalysis {
+  id: string;
+  analysis_id: string;
+  sku: string;
+  region: string;
+  recommendation: string;
+  alert: string;
+  forecast_highlight: string;
+  priority: string;
+  action: string;
+  reason: string;
+  created_at: string;
+}
+
+interface RowAnalysisTableProps {
+  analysisId: string;
+  data: RowAnalysis[];
+}
+
+const getPriorityColor = (priority: string): "destructive" | "default" | "secondary" | "outline" => {
+  switch (priority?.toLowerCase()) {
+    case 'critical': return 'destructive';
+    case 'high': return 'destructive';
+    case 'medium': return 'default';
+    case 'low': return 'secondary';
+    default: return 'outline';
+  }
+};
+
+export default function RowAnalysisTable({ analysisId, data }: RowAnalysisTableProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [alertFilter, setAlertFilter] = useState('all');
+
+  // Get unique values for filters
+  const uniqueRegions = useMemo(() => 
+    Array.from(new Set(data.map(row => row.region).filter(Boolean))) as string[], [data]
+  );
+
+  const uniquePriorities = useMemo(() => 
+    Array.from(new Set(data.map(row => row.priority).filter(Boolean))) as string[], [data]
+  );
+
+  // Filter data
+  const filteredData = useMemo(() => {
+    return data.filter(row => {
+      const matchesSearch = !searchTerm || 
+        row.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.region?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.action?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesPriority = priorityFilter === 'all' || 
+        row.priority?.toLowerCase() === priorityFilter.toLowerCase();
+
+      const matchesRegion = regionFilter === 'all' || 
+        row.region === regionFilter;
+
+      const matchesAlert = alertFilter === 'all' || 
+        (alertFilter === 'with-alerts' && row.alert && row.alert.trim() !== '') ||
+        (alertFilter === 'no-alerts' && (!row.alert || row.alert.trim() === ''));
+
+      return matchesSearch && matchesPriority && matchesRegion && matchesAlert;
+    });
+  }, [data, searchTerm, priorityFilter, regionFilter, alertFilter]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setPriorityFilter('all');
+    setRegionFilter('all');
+    setAlertFilter('all');
+  };
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Search className="h-5 w-5" />
+          Row-Level Analysis ({filteredData.length} rows)
+        </CardTitle>
+        <CardDescription>
+          Detailed analysis results for each SKU-Region combination
+        </CardDescription>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        {/* Filters */}
+        <div className="flex flex-wrap gap-3 p-4 bg-muted/50 rounded-lg">
+          <div className="flex-1 min-w-[200px]">
+            <Input
+              placeholder="Search SKU, Region, or Action..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          
+          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              {uniquePriorities.map(priority => (
+                <SelectItem key={priority} value={priority || ''}>
+                  {priority}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={regionFilter} onValueChange={setRegionFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Regions</SelectItem>
+              {uniqueRegions.map(region => (
+                <SelectItem key={region} value={region || ''}>
+                  {region}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={alertFilter} onValueChange={setAlertFilter}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Alerts" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Rows</SelectItem>
+              <SelectItem value="with-alerts">With Alerts</SelectItem>
+              <SelectItem value="no-alerts">No Alerts</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" onClick={clearFilters} className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Clear
+          </Button>
+        </div>
+
+        {/* Table */}
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>SKU</TableHead>
+                <TableHead>Region</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Alert</TableHead>
+                <TableHead>Forecast</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredData.map((row, index) => (
+                <TableRow key={row.id}>
+                  <TableCell className="font-medium">
+                    {row.sku}
+                  </TableCell>
+                  <TableCell>
+                    {row.region}
+                  </TableCell>
+                  <TableCell>
+                    {row.priority && (
+                      <Badge variant={getPriorityColor(row.priority)}>
+                        {row.priority}
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    <div className="truncate" title={row.action}>
+                      {row.action}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-[250px]">
+                    <div className="truncate" title={row.reason}>
+                      {row.reason}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    {row.alert && row.alert.trim() !== '' && (
+                      <div className="truncate text-red-600" title={row.alert}>
+                        {row.alert}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[200px]">
+                    <div className="truncate" title={row.forecast_highlight}>
+                      {row.forecast_highlight}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              
+              {filteredData.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    No rows match the current filters
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+} 
