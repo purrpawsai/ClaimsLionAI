@@ -32,3 +32,4 @@ build/
 *.zip
 *.tar.gz
 .project_structure.txt
+.DS_Store
