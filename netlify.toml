@@ -9,9 +9,3 @@
 
 [functions]
   node_bundler = "esbuild"
-
-[functions.analysis]
-  timeout = 300
-
-[functions.upload]
-  timeout = 300
