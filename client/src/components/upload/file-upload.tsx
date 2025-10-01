@@ -2,16 +2,16 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { CloudUpload, Zap, Shield } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/router";
 import { v4 as uuidv4 } from "uuid";
+// ✅ Correct import for Vite + React Router
+import { useNavigate } from "react-router-dom";
 
 interface FileUploadProps {
   onUploadComplete?: (analysisId: string) => void; // Optional callback
 }
 
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -24,36 +24,39 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     setUploadError(null);
 
     try {
-      const timestamp = Date.now();
-      const filePath = `claims/${timestamp}_${file.name}`;
+      // 1️⃣ Upload file to Supabase via your Edge Function
+      const formData = new FormData();
+      formData.append("file", file);
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from("claims") // Make sure this bucket exists!
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) throw new Error(uploadError.message);
-
-      // Trigger analysis (via Edge Function or API Route)
-      const response = await fetch("/api/analyze", {
+      const uploadRes = await fetch(import.meta.env.VITE_UPLOAD_FUNCTION_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filePath, analysisId }),
+        body: formData,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
+      if (!uploadRes.ok) {
+        const errorText = await uploadRes.text();
+        throw new Error(`Upload failed: ${errorText}`);
+      }
+
+      const { fileUrl } = await uploadRes.json();
+
+      // 2️⃣ Trigger analysis Edge Function
+      const processRes = await fetch(import.meta.env.VITE_PROCESS_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileUrl, analysisId }), // region can be added here too
+      });
+
+      if (!processRes.ok) {
+        const errorText = await processRes.text();
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
-      // Optional callback or redirect
+      // 3️⃣ Either call callback or navigate to progress page
       if (onUploadComplete) {
         onUploadComplete(analysisId);
       } else {
-        router.push(`/progress/${analysisId}`);
+        navigate(`/progress/${analysisId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
@@ -61,13 +64,13 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     } finally {
       setUploading(false);
     }
-  }, [router, onUploadComplete]);
+  }, [navigate, onUploadComplete]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'text/csv': ['.csv'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      "text/csv": [".csv"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
     maxSize: 30 * 1024 * 1024, // 30MB
   });
@@ -99,8 +102,8 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         {isDragActive ? "Release to start AI analysis" : "Drag & drop files or click browse"}
       </p>
 
-      <Button 
-        type="button" 
+      <Button
+        type="button"
         className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold px-8 py-3 text-lg shadow-xl mb-6"
         disabled={uploading}
       >
