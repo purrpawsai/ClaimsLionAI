@@ -1,17 +1,17 @@
-// Supabase Edge Function - Handles Excel file upload and returns public URL
+// supabase/functions/uploadClaimFile/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Define CORS headers for preflight + actual responses
+// CORS headers to allow frontend origin
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app",
+  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app", // ✅ Match this to your frontend exactly
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Content-Type": "application/json",
+  "Access-Control-Expose-Headers": "*",
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
+  // 🔁 Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 200,
@@ -20,31 +20,27 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with service role
     const supabase = createClient(
       Deno.env.get("PROJECT_URL")!,
       Deno.env.get("SERVICE_ROLE_KEY")!
     );
 
-    // Parse incoming form-data
     const formData = await req.formData();
     const file = formData.get("file") as File;
 
     if (!file) {
-      return new Response(
-        JSON.stringify({ error: "Missing file" }),
-        {
-          status: 400,
-          headers: corsHeaders,
-        }
-      );
+      return new Response(JSON.stringify({ error: "Missing file" }), {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
     }
 
-    // Generate random filename with extension preserved
     const ext = file.name.split(".").pop();
     const filename = `${crypto.randomUUID()}.${ext}`;
 
-    // Upload to Supabase Storage
     const { error } = await supabase.storage
       .from("claims-uploads")
       .upload(filename, file.stream(), {
@@ -53,32 +49,33 @@ serve(async (req) => {
       });
 
     if (error) {
-      return new Response(
-        JSON.stringify({ error: "Upload failed", details: error.message }),
-        {
-          status: 500,
-          headers: corsHeaders,
-        }
-      );
+      return new Response(JSON.stringify({ error: "Upload failed", details: error.message }), {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
     }
 
-    // Get the public URL
-    const { data } = supabase.storage.from("claims-uploads").getPublicUrl(filename);
+    const { data } = supabase.storage
+      .from("claims-uploads")
+      .getPublicUrl(filename);
 
-    return new Response(
-      JSON.stringify({ fileUrl: data.publicUrl }),
-      {
-        status: 200,
-        headers: corsHeaders,
-      }
-    );
+    return new Response(JSON.stringify({ fileUrl: data.publicUrl }), {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: "Unexpected server error", details: err.message }),
-      {
-        status: 500,
-        headers: corsHeaders,
-      }
-    );
+    return new Response(JSON.stringify({ error: "Unexpected server error", details: err.message }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
   }
 });
