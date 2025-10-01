@@ -4,15 +4,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Define CORS headers for preflight + actual responses
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app", // your frontend URL
+  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Content-Type": "application/json",
 };
 
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
@@ -27,13 +31,13 @@ serve(async (req) => {
     const file = formData.get("file") as File;
 
     if (!file) {
-      return new Response(JSON.stringify({ error: "Missing file" }), {
-        status: 400,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing file" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        }
+      );
     }
 
     // Generate random filename with extension preserved
@@ -49,32 +53,32 @@ serve(async (req) => {
       });
 
     if (error) {
-      return new Response(JSON.stringify({ error: "Upload failed", details: error.message }), {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      });
+      return new Response(
+        JSON.stringify({ error: "Upload failed", details: error.message }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        }
+      );
     }
 
     // Get the public URL
     const { data } = supabase.storage.from("claims-uploads").getPublicUrl(filename);
 
-    return new Response(JSON.stringify({ fileUrl: data.publicUrl }), {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
-    });
+    return new Response(
+      JSON.stringify({ fileUrl: data.publicUrl }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      }
+    );
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Unexpected server error", details: err.message }), {
-      status: 500,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
-    });
+    return new Response(
+      JSON.stringify({ error: "Unexpected server error", details: err.message }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      }
+    );
   }
 });
