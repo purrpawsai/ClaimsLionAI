@@ -3,11 +3,10 @@ import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { CloudUpload, Zap, Shield } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-// ✅ Correct import for Vite + React Router
 import { useNavigate } from "react-router-dom";
 
 interface FileUploadProps {
-  onUploadComplete?: (analysisId: string) => void; // Optional callback
+  onUploadComplete?: (analysisId: string) => void;
 }
 
 export function FileUpload({ onUploadComplete }: FileUploadProps) {
@@ -18,19 +17,22 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    const analysisId = uuidv4(); // Unique ID for tracking analysis
+    const analysisId = uuidv4();
 
     setUploading(true);
     setUploadError(null);
 
     try {
-      // 1️⃣ Upload file to Supabase via your Edge Function
       const formData = new FormData();
       formData.append("file", file);
 
+      // 1️⃣ Upload to Supabase (with Authorization header)
       const uploadRes = await fetch(import.meta.env.VITE_UPLOAD_FUNCTION_URL, {
         method: "POST",
         body: formData,
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
       });
 
       if (!uploadRes.ok) {
@@ -40,11 +42,14 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
       const { fileUrl } = await uploadRes.json();
 
-      // 2️⃣ Trigger analysis Edge Function
+      // 2️⃣ Trigger analysis (also with Authorization)
       const processRes = await fetch(import.meta.env.VITE_PROCESS_FUNCTION_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileUrl, analysisId }), // region can be added here too
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ fileUrl, analysisId }),
       });
 
       if (!processRes.ok) {
@@ -52,7 +57,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
-      // 3️⃣ Either call callback or navigate to progress page
+      // 3️⃣ Callback or navigation
       if (onUploadComplete) {
         onUploadComplete(analysisId);
       } else {
@@ -72,7 +77,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       "text/csv": [".csv"],
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
-    maxSize: 30 * 1024 * 1024, // 30MB
+    maxSize: 30 * 1024 * 1024,
   });
 
   return (
