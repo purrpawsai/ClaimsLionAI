@@ -2,14 +2,35 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// CORS headers to allow frontend origin
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app", // ✅ Match this to your frontend exactly
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Expose-Headers": "*",
+};
+
 serve(async (req) => {
+  // 🔁 Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      status: 200,
+      headers: corsHeaders,
+    });
+  }
   const supabase = createClient(
     Deno.env.get("PROJECT_URL")!,
     Deno.env.get("SERVICE_ROLE_KEY")!
   );
 
   const { convoId, newUserMessage } = await req.json();
-  if (!convoId || !newUserMessage) return new Response("Missing fields", { status: 400 });
+  if (!convoId || !newUserMessage) return new Response(JSON.stringify({ error: "Missing fields" }), { 
+    status: 400,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
 
   const { data, error } = await supabase
     .from("claims_conversations")
@@ -17,7 +38,13 @@ serve(async (req) => {
     .eq("id", convoId)
     .single();
 
-  if (error || !data) return new Response("Conversation not found", { status: 404 });
+  if (error || !data) return new Response(JSON.stringify({ error: "Conversation not found" }), { 
+    status: 404,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
 
   const messages = [...data.messages, { role: "user", content: newUserMessage }];
 
@@ -42,6 +69,9 @@ serve(async (req) => {
     .eq("id", convoId);
 
   return new Response(JSON.stringify({ reply: aiReply }), {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
   });
 });
