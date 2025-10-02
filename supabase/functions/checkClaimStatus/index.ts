@@ -18,38 +18,57 @@ serve(async (req) => {
       headers: corsHeaders,
     });
   }
-  const supabase = createClient(
-    Deno.env.get("PROJECT_URL")!,
-    Deno.env.get("SERVICE_ROLE_KEY")!
-  );
+  
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  const { convoId } = await req.json();
-  if (!convoId) return new Response(JSON.stringify({ error: "Missing convoId" }), { 
-    status: 400,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    const { convoId } = await req.json();
+    if (!convoId) {
+      return new Response(JSON.stringify({ error: "Missing convoId" }), { 
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  const { data, error } = await supabase
-    .from("claims_conversations")
-    .select("status")
-    .eq("id", convoId)
-    .single();
+    const { data, error } = await supabase
+      .from("claims_conversations")
+      .select("status")
+      .eq("id", convoId)
+      .single();
 
-  if (error || !data) return new Response(JSON.stringify({ error: "Conversation not found" }), { 
-    status: 404,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    if (error || !data) {
+      return new Response(JSON.stringify({ error: "Conversation not found" }), { 
+        status: 404,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  return new Response(JSON.stringify({ status: data.status }), {
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    return new Response(JSON.stringify({ status: data.status }), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Unexpected server error", details: err.message }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  }
 });

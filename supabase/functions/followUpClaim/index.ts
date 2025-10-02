@@ -18,60 +18,84 @@ serve(async (req) => {
       headers: corsHeaders,
     });
   }
-  const supabase = createClient(
-    Deno.env.get("PROJECT_URL")!,
-    Deno.env.get("SERVICE_ROLE_KEY")!
-  );
+  
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  const { convoId, newUserMessage } = await req.json();
-  if (!convoId || !newUserMessage) return new Response(JSON.stringify({ error: "Missing fields" }), { 
-    status: 400,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    const { convoId, newUserMessage } = await req.json();
+    if (!convoId || !newUserMessage) {
+      return new Response(JSON.stringify({ error: "Missing fields" }), { 
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  const { data, error } = await supabase
-    .from("claims_conversations")
-    .select("messages")
-    .eq("id", convoId)
-    .single();
+    const { data, error } = await supabase
+      .from("claims_conversations")
+      .select("messages")
+      .eq("id", convoId)
+      .single();
 
-  if (error || !data) return new Response(JSON.stringify({ error: "Conversation not found" }), { 
-    status: 404,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    if (error || !data) {
+      return new Response(JSON.stringify({ error: "Conversation not found" }), { 
+        status: 404,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  const messages = [...data.messages, { role: "user", content: newUserMessage }];
+    const messages = [...data.messages, { role: "user", content: newUserMessage }];
 
-  const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": Deno.env.get("CLAUDE_API_KEY")!,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model: "claude-3-opus-20240229", max_tokens: 4000, messages })
-  });
+    const claudeApiKey = Deno.env.get("CLAUDE_API_KEY");
+    if (!claudeApiKey) {
+      throw new Error("Missing CLAUDE_API_KEY environment variable");
+    }
 
-  const { content } = await claudeRes.json();
-  const aiReply = content?.[0]?.text || "";
+    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": claudeApiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: "claude-3-opus-20240229", max_tokens: 4000, messages })
+    });
 
-  messages.push({ role: "assistant", content: aiReply });
+    const { content } = await claudeRes.json();
+    const aiReply = content?.[0]?.text || "";
 
-  await supabase
-    .from("claims_conversations")
-    .update({ messages, last_ai_response: aiReply })
-    .eq("id", convoId);
+    messages.push({ role: "assistant", content: aiReply });
 
-  return new Response(JSON.stringify({ reply: aiReply }), {
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    await supabase
+      .from("claims_conversations")
+      .update({ messages, last_ai_response: aiReply })
+      .eq("id", convoId);
+
+    return new Response(JSON.stringify({ reply: aiReply }), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Unexpected server error", details: err.message }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  }
 });
