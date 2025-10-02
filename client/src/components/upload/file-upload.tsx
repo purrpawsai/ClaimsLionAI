@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { CloudUpload, Zap, Shield } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 
 interface FileUploadProps {
@@ -17,7 +16,6 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    const analysisId = uuidv4();
 
     setUploading(true);
     setUploadError(null);
@@ -49,7 +47,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ fileUrl, analysisId }),
+        body: JSON.stringify({ fileUrl, region: "General" }), // Default region for now
       });
 
       if (!processRes.ok) {
@@ -57,11 +55,13 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
+      const { convoId } = await processRes.json();
+
       // 3️⃣ Callback or navigation
       if (onUploadComplete) {
-        onUploadComplete(analysisId);
+        onUploadComplete(convoId);
       } else {
-        navigate(`/progress/${analysisId}`);
+        navigate(`/progress/${convoId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
