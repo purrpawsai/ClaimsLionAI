@@ -77,7 +77,15 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       "text/csv": [".csv"],
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
-    maxSize: 30 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024, // 10MB limit to match backend
+    onDropRejected: (fileRejections) => {
+      const error = fileRejections[0]?.errors[0];
+      if (error?.code === "file-too-large") {
+        setUploadError("File is too large. Maximum size is 10MB. Please upload a smaller file or sample data.");
+      } else {
+        setUploadError(error?.message || "File rejected");
+      }
+    },
   });
 
   return (
@@ -131,7 +139,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           XLSX
         </div>
       </div>
-      <p className="text-xs text-slate-500 mt-2">Maximum file size: 30MB</p>
+      <p className="text-xs text-slate-500 mt-2">Maximum file size: 10MB</p>
     </div>
   );
 }

@@ -87,6 +87,22 @@ serve(async (req) => {
     const buf = new Uint8Array(await fileRes.arrayBuffer());
     console.log("📦 File size:", buf.length, "bytes");
     
+    // Check file size limit (10MB max to avoid memory issues)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    if (buf.length > MAX_FILE_SIZE) {
+      console.error("❌ File too large:", buf.length, "bytes. Max:", MAX_FILE_SIZE);
+      return new Response(JSON.stringify({ 
+        error: "File too large", 
+        details: `File size is ${(buf.length / 1024 / 1024).toFixed(2)}MB. Maximum allowed is 10MB. Please upload a smaller file or sample data.` 
+      }), { 
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
+    
     const workbook = XLSX.read(buf, { type: "array" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
@@ -116,7 +132,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-opus-20240229",
+        model: "claude-3-5-sonnet-20241022",
         max_tokens: 4000,
         messages,
       }),
