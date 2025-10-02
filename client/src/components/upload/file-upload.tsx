@@ -12,6 +12,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>("");
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -56,8 +57,12 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       }
 
       const { convoId } = await processRes.json();
+      console.log("✅ Processing started, convoId:", convoId);
 
-      // 3️⃣ Callback or navigation
+      // 3️⃣ Poll for completion
+      await pollForCompletion(convoId);
+
+      // 4️⃣ Callback or navigation
       if (onUploadComplete) {
         onUploadComplete(convoId);
       } else {
@@ -68,8 +73,53 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       setUploadError(err.message);
     } finally {
       setUploading(false);
+      setProcessingStatus("");
     }
   }, [navigate, onUploadComplete]);
+
+  const pollForCompletion = async (convoId: string) => {
+    const maxAttempts = 60; // 60 attempts = 3 minutes max
+    let attempts = 0;
+
+    setProcessingStatus("Analyzing your data...");
+
+    while (attempts < maxAttempts) {
+      try {
+        const statusRes = await fetch(import.meta.env.VITE_CLAIM_STATUS_FUNCTION_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ convoId }),
+        });
+
+        if (statusRes.ok) {
+          const { status } = await statusRes.json();
+          console.log("📊 Status check:", status);
+
+          if (status === "complete") {
+            setProcessingStatus("Analysis complete!");
+            return;
+          } else if (status === "error") {
+            throw new Error("Analysis failed. Please try again.");
+          }
+
+          // Still processing
+          setProcessingStatus(`Processing... (${attempts * 3}s)`);
+        }
+
+        // Wait 3 seconds before next poll
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        attempts++;
+      } catch (err: any) {
+        console.error("Status poll error:", err);
+        throw new Error("Failed to check analysis status");
+      }
+    }
+
+    throw new Error("Analysis is taking longer than expected. Please check back later.");
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -121,12 +171,16 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         disabled={uploading}
       >
         <Zap className="mr-2 h-5 w-5" />
-        {uploading ? "Uploading..." : "Browse Files"}
+        {uploading ? (processingStatus || "Uploading...") : "Browse Files"}
         <Shield className="ml-2 h-4 w-4" />
       </Button>
 
       {uploadError && (
         <p className="text-red-500 text-sm mt-2">{uploadError}</p>
+      )}
+      
+      {processingStatus && !uploadError && (
+        <p className="text-blue-600 text-sm mt-2 animate-pulse">{processingStatus}</p>
       )}
 
       <div className="flex items-center justify-center space-x-6 text-sm font-medium">
