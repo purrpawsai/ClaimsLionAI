@@ -61,7 +61,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       if (onUploadComplete) {
         onUploadComplete(convoId);
       } else {
-        navigate(`/progress/${convoId}`);
+        navigate(`/dashboard/${convoId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
