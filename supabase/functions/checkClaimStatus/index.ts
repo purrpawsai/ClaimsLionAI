@@ -29,9 +29,9 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { analysisId } = await req.json();
-    if (!analysisId) {
-      return new Response(JSON.stringify({ error: "Missing analysisId" }), { 
+    const { convoId } = await req.json();
+    if (!convoId) {
+      return new Response(JSON.stringify({ error: "Missing convoId" }), { 
         status: 400,
         headers: {
           ...corsHeaders,
@@ -41,13 +41,13 @@ serve(async (req) => {
     }
 
     const { data, error } = await supabase
-      .from("analysis_results")
+      .from("claims_conversations")
       .select("status")
-      .eq("id", analysisId)
+      .eq("id", convoId)
       .single();
 
     if (error || !data) {
-      return new Response(JSON.stringify({ error: "Analysis not found" }), { 
+      return new Response(JSON.stringify({ error: "Conversation not found" }), { 
         status: 404,
         headers: {
           ...corsHeaders,

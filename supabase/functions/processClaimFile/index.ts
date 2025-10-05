@@ -51,25 +51,24 @@ serve(async (req) => {
       });
     }
 
-    // 1. Create pending analysis entry
-    console.log("📝 Creating analysis record...");
-    const analysisInsert = await supabase.from("analysis_results").insert({
-      filename: fileUrl.split('/').pop() || 'unknown',
+    // 1. Create pending conversation entry
+    console.log("📝 Creating conversation record...");
+    const convoInsert = await supabase.from("claims_conversations").insert({
+      region: "General", // Default region since we're not requiring user input
       file_url: fileUrl,
-      json_response: {},
+      messages: [],
+      last_ai_response: null,
       status: "pending",
-      analysis_summary: null,
-      started_processing_at: new Date().toISOString(),
     }).select("id").single();
 
-    console.log("📊 Insert result:", analysisInsert);
+    console.log("📊 Insert result:", convoInsert);
 
-    const analysisId = analysisInsert.data?.id;
-    if (!analysisId) {
-      console.error("❌ Failed to create analysis:", analysisInsert.error);
+    const convoId = convoInsert.data?.id;
+    if (!convoId) {
+      console.error("❌ Failed to create conversation:", convoInsert.error);
       return new Response(JSON.stringify({ 
-        error: "Failed to create analysis", 
-        details: analysisInsert.error?.message 
+        error: "Failed to create conversation", 
+        details: convoInsert.error?.message 
       }), { 
         status: 500,
         headers: {
@@ -79,15 +78,15 @@ serve(async (req) => {
       });
     }
     
-    console.log("✅ Analysis created:", analysisId);
+    console.log("✅ Conversation created:", convoId);
 
-    // 🚀 Return immediately with analysisId - processing continues in background
-    console.log("🔄 Returning analysisId immediately, processing in background...");
+    // 🚀 Return immediately with convoId - processing continues in background
+    console.log("🔄 Returning convoId immediately, processing in background...");
     
     // Start background processing (don't await)
-    processFileInBackground(analysisId, fileUrl, supabase);
+    processFileInBackground(convoId, fileUrl, supabase);
 
-    return new Response(JSON.stringify({ analysisId, status: "pending" }), {
+    return new Response(JSON.stringify({ convoId, status: "pending" }), {
       status: 202, // Accepted - processing started
       headers: {
         ...corsHeaders,
@@ -108,7 +107,7 @@ serve(async (req) => {
 
 // 🔄 Background processing function
 async function processFileInBackground(
-  analysisId: string,
+  convoId: string,
   fileUrl: string,
   supabase: SupabaseClient
 ) {
@@ -125,12 +124,12 @@ async function processFileInBackground(
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (buf.length > MAX_FILE_SIZE) {
       console.error("❌ [Background] File too large:", buf.length, "bytes");
-      await supabase.from("analysis_results")
+      await supabase.from("claims_conversations")
         .update({
           status: "error",
-          error_message: `File too large: ${(buf.length / 1024 / 1024).toFixed(2)}MB. Maximum allowed is 10MB.`,
+          last_ai_response: `File too large: ${(buf.length / 1024 / 1024).toFixed(2)}MB. Maximum allowed is 10MB.`,
         })
-        .eq("id", analysisId);
+        .eq("id", convoId);
       return;
     }
     
@@ -151,12 +150,12 @@ async function processFileInBackground(
     const claudeApiKey = Deno.env.get("CLAUDE_API_KEY");
     if (!claudeApiKey) {
       console.error("❌ [Background] Missing CLAUDE_API_KEY");
-      await supabase.from("analysis_results")
+      await supabase.from("claims_conversations")
         .update({
           status: "error",
-          error_message: "Missing CLAUDE_API_KEY configuration",
+          last_ai_response: "Missing CLAUDE_API_KEY configuration",
         })
-        .eq("id", analysisId);
+        .eq("id", convoId);
       return;
     }
     
@@ -180,12 +179,12 @@ async function processFileInBackground(
     if (!claudeRes.ok) {
       const errorText = await claudeRes.text();
       console.error("❌ [Background] Claude API error:", errorText);
-      await supabase.from("analysis_results")
+      await supabase.from("claims_conversations")
         .update({
           status: "error",
-          error_message: `Claude API error: ${errorText}`,
+          last_ai_response: `Claude API error: ${errorText}`,
         })
-        .eq("id", analysisId);
+        .eq("id", convoId);
       return;
     }
     
@@ -196,33 +195,26 @@ async function processFileInBackground(
     const aiReply = content?.[0]?.text || "";
     console.log("📝 [Background] AI reply length:", aiReply.length);
     
-    // Parse the AI response as JSON
-    let parsedResponse;
-    try {
-      parsedResponse = JSON.parse(aiReply);
-    } catch (e) {
-      parsedResponse = { error: "Failed to parse AI response", raw_response: aiReply };
-    }
+    const finalMessages = [userMessage, { role: "assistant", content: aiReply }];
 
-    // 5. Update analysis with AI response
-    console.log("💾 [Background] Updating analysis with results...");
-    await supabase.from("analysis_results")
+    // 5. Update conversation with AI response
+    console.log("💾 [Background] Updating conversation with results...");
+    await supabase.from("claims_conversations")
       .update({
-        json_response: parsedResponse,
+        messages: finalMessages,
+        last_ai_response: aiReply,
         status: "complete",
-        analysis_summary: aiReply.substring(0, 500), // First 500 chars as summary
-        analyzed_at: new Date().toISOString(),
       })
-      .eq("id", analysisId);
+      .eq("id", convoId);
 
     console.log("✅ [Background] Analysis complete!");
   } catch (err) {
     console.error("💥 [Background] ERROR:", err.message, err.stack);
-    await supabase.from("analysis_results")
+    await supabase.from("claims_conversations")
       .update({
         status: "error",
-        error_message: `Processing error: ${err.message}`,
+        last_ai_response: `Processing error: ${err.message}`,
       })
-      .eq("id", analysisId);
+      .eq("id", convoId);
   }
 }

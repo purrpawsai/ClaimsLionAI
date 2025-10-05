@@ -56,17 +56,17 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
-      const { analysisId } = await processRes.json();
-      console.log("✅ Processing started, analysisId:", analysisId);
+      const { convoId } = await processRes.json();
+      console.log("✅ Processing started, convoId:", convoId);
 
       // 3️⃣ Poll for completion
-      await pollForCompletion(analysisId);
+      await pollForCompletion(convoId);
 
       // 4️⃣ Callback or navigation
       if (onUploadComplete) {
-        onUploadComplete(analysisId);
+        onUploadComplete(convoId);
       } else {
-        navigate(`/dashboard/${analysisId}`);
+        navigate(`/dashboard/${convoId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
@@ -77,7 +77,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     }
   }, [navigate, onUploadComplete]);
 
-  const pollForCompletion = async (analysisId: string) => {
+  const pollForCompletion = async (convoId: string) => {
     const maxAttempts = 60; // 60 attempts = 3 minutes max
     let attempts = 0;
 
@@ -91,7 +91,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ analysisId }),
+          body: JSON.stringify({ convoId }),
         });
 
         if (statusRes.ok) {
