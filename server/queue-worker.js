@@ -1,20 +1,40 @@
 // server/queue-worker.js
 // Express worker service for processing queue tasks
 
+// ⚠️ CRITICAL: Load .env BEFORE anything else
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
+// Debug: Log environment variables
+console.log('🔍 Environment Check:');
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? '✅ SET' : '❌ NOT SET');
+console.log('SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ SET' : '❌ NOT SET');
+console.log('CLAUDE_API_KEY:', process.env.CLAUDE_API_KEY ? '✅ SET' : '❌ NOT SET');
+
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const XLSX = require('xlsx');
 const fetch = require('node-fetch');
-require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+
+// Validate required environment variables
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('❌ ERROR: Required environment variables are not set!');
+  console.error('Please create a .env file in the project root with:');
+  console.error('SUPABASE_URL=your_supabase_url');
+  console.error('SUPABASE_SERVICE_ROLE_KEY=your_service_role_key');
+  console.error('CLAUDE_API_KEY=your_claude_api_key');
+  process.exit(1);
+}
 
 // Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+console.log('✅ Supabase client initialized successfully');
 
 // Claude API configuration
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
