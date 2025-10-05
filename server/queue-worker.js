@@ -198,7 +198,7 @@ async function processQueueTask(task) {
     const processingTime = Math.round((Date.now() - startTime) / 1000);
     
     const { data: analysisResult, error: analysisError } = await supabase
-      .from('analysis_results')
+      .from('queue_analysis_results')
       .insert({
         queue_id: task.id,
         raw_ai_reply: aiReply,
@@ -242,7 +242,7 @@ async function processQueueTask(task) {
 
     // Create error analysis result
     await supabase
-      .from('analysis_results')
+      .from('queue_analysis_results')
       .insert({
         queue_id: task.id,
         status: 'error',

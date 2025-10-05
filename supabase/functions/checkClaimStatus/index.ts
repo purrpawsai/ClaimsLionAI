@@ -53,7 +53,7 @@ serve(async (req) => {
         started_at,
         completed_at,
         retry_count,
-        analysis_results (
+        queue_analysis_results (
           id,
           status,
           insights_summary,
@@ -83,7 +83,7 @@ serve(async (req) => {
       startedAt: queueData.started_at,
       completedAt: queueData.completed_at,
       retryCount: queueData.retry_count,
-      analysis: queueData.analysis_results?.[0] || null
+      analysis: queueData.queue_analysis_results?.[0] || null
     };
 
     return new Response(JSON.stringify(response), {
