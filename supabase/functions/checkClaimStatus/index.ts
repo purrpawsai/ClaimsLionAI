@@ -1,10 +1,12 @@
-// Pollable endpoint to check if analysis is complete
+// supabase/functions/checkClaimStatus/index.ts
+// Check processing queue status
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // CORS headers to allow frontend origin
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app", // ✅ Match this to your frontend exactly
+  "Access-Control-Allow-Origin": "https://claimslionai.netlify.app",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Expose-Headers": "*",
@@ -29,9 +31,9 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { convoId } = await req.json();
-    if (!convoId) {
-      return new Response(JSON.stringify({ error: "Missing convoId" }), { 
+    const { queueId } = await req.json();
+    if (!queueId) {
+      return new Response(JSON.stringify({ error: "Missing queueId" }), { 
         status: 400,
         headers: {
           ...corsHeaders,
@@ -40,14 +42,30 @@ serve(async (req) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from("claims_conversations")
-      .select("status")
-      .eq("id", convoId)
+    // Get queue status and analysis results
+    const { data: queueData, error: queueError } = await supabase
+      .from("processing_queue")
+      .select(`
+        id,
+        status,
+        error_message,
+        created_at,
+        started_at,
+        completed_at,
+        retry_count,
+        analysis_results (
+          id,
+          status,
+          insights_summary,
+          error_message,
+          created_at
+        )
+      `)
+      .eq("id", queueId)
       .single();
 
-    if (error || !data) {
-      return new Response(JSON.stringify({ error: "Conversation not found" }), { 
+    if (queueError || !queueData) {
+      return new Response(JSON.stringify({ error: "Queue task not found" }), { 
         status: 404,
         headers: {
           ...corsHeaders,
@@ -56,7 +74,19 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ status: data.status }), {
+    // Return comprehensive status
+    const response = {
+      queueId: queueData.id,
+      status: queueData.status,
+      errorMessage: queueData.error_message,
+      createdAt: queueData.created_at,
+      startedAt: queueData.started_at,
+      completedAt: queueData.completed_at,
+      retryCount: queueData.retry_count,
+      analysis: queueData.analysis_results?.[0] || null
+    };
+
+    return new Response(JSON.stringify(response), {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/json",

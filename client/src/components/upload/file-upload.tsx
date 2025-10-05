@@ -41,32 +41,36 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
 
       const { fileUrl } = await uploadRes.json();
 
-      // 2️⃣ Trigger analysis (also with Authorization)
+      // 2️⃣ Queue file for processing
       const processRes = await fetch(import.meta.env.VITE_PROCESS_FUNCTION_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ fileUrl }),
+        body: JSON.stringify({ 
+          fileUrl,
+          filename: file.name,
+          fileSize: file.size
+        }),
       });
 
       if (!processRes.ok) {
         const errorText = await processRes.text();
-        throw new Error(`Failed to trigger analysis: ${errorText}`);
+        throw new Error(`Failed to queue file for processing: ${errorText}`);
       }
 
-      const { convoId } = await processRes.json();
-      console.log("✅ Processing started, convoId:", convoId);
+      const { queueId } = await processRes.json();
+      console.log("✅ File queued for processing, queueId:", queueId);
 
       // 3️⃣ Poll for completion
-      await pollForCompletion(convoId);
+      await pollForCompletion(queueId);
 
       // 4️⃣ Callback or navigation
       if (onUploadComplete) {
-        onUploadComplete(convoId);
+        onUploadComplete(queueId);
       } else {
-        navigate(`/dashboard/${convoId}`);
+        navigate(`/dashboard/${queueId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
@@ -77,11 +81,11 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
     }
   }, [navigate, onUploadComplete]);
 
-  const pollForCompletion = async (convoId: string) => {
-    const maxAttempts = 60; // 60 attempts = 3 minutes max
+  const pollForCompletion = async (queueId: string) => {
+    const maxAttempts = 120; // 120 attempts = 6 minutes max (30s intervals)
     let attempts = 0;
 
-    setProcessingStatus("Analyzing your data...");
+    setProcessingStatus("Queued for processing...");
 
     while (attempts < maxAttempts) {
       try {
@@ -91,34 +95,35 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ convoId }),
+          body: JSON.stringify({ queueId }),
         });
 
         if (statusRes.ok) {
-          const { status } = await statusRes.json();
-          console.log("📊 Status check:", status);
+          const statusData = await statusRes.json();
+          console.log("📊 Status check:", statusData.status);
 
-          if (status === "complete") {
+          if (statusData.status === "complete") {
             setProcessingStatus("Analysis complete!");
             return;
-          } else if (status === "error") {
-            throw new Error("Analysis failed. Please try again.");
+          } else if (statusData.status === "error") {
+            throw new Error(statusData.errorMessage || "Analysis failed. Please try again.");
+          } else if (statusData.status === "processing") {
+            setProcessingStatus("Processing your data...");
+          } else {
+            setProcessingStatus(`Queued (${attempts * 30}s elapsed)`);
           }
-
-          // Still processing
-          setProcessingStatus(`Processing... (${attempts * 3}s)`);
         }
 
-        // Wait 3 seconds before next poll
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        // Wait 30 seconds before next poll
+        await new Promise((resolve) => setTimeout(resolve, 30000));
         attempts++;
       } catch (err: any) {
         console.error("Status poll error:", err);
-        throw new Error("Failed to check analysis status");
+        throw new Error("Failed to check processing status");
       }
     }
 
-    throw new Error("Analysis is taking longer than expected. Please check back later.");
+    throw new Error("Processing is taking longer than expected. Please check back later.");
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
