@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
 import { CloudUpload, Zap, Shield } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 
 interface FileUploadProps {
@@ -13,11 +12,11 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string>("");
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     const file = acceptedFiles[0];
-    const analysisId = uuidv4();
 
     setUploading(true);
     setUploadError(null);
@@ -57,21 +56,70 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
-      const { analysisId: returnedAnalysisId } = await processRes.json();
+      const { analysisId } = await processRes.json();
+      console.log("✅ Processing started, analysisId:", analysisId);
 
-      // 3️⃣ Callback or navigation
+      // 3️⃣ Poll for completion
+      await pollForCompletion(analysisId);
+
+      // 4️⃣ Callback or navigation
       if (onUploadComplete) {
-        onUploadComplete(returnedAnalysisId);
+        onUploadComplete(analysisId);
       } else {
-        navigate(`/progress/${returnedAnalysisId}`);
+        navigate(`/dashboard/${analysisId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
       setUploadError(err.message);
     } finally {
       setUploading(false);
+      setProcessingStatus("");
     }
   }, [navigate, onUploadComplete]);
+
+  const pollForCompletion = async (analysisId: string) => {
+    const maxAttempts = 60; // 60 attempts = 3 minutes max
+    let attempts = 0;
+
+    setProcessingStatus("Analyzing your data...");
+
+    while (attempts < maxAttempts) {
+      try {
+        const statusRes = await fetch(import.meta.env.VITE_CLAIM_STATUS_FUNCTION_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ analysisId }),
+        });
+
+        if (statusRes.ok) {
+          const { status } = await statusRes.json();
+          console.log("📊 Status check:", status);
+
+          if (status === "complete") {
+            setProcessingStatus("Analysis complete!");
+            return;
+          } else if (status === "error") {
+            throw new Error("Analysis failed. Please try again.");
+          }
+
+          // Still processing
+          setProcessingStatus(`Processing... (${attempts * 3}s)`);
+        }
+
+        // Wait 3 seconds before next poll
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        attempts++;
+      } catch (err: any) {
+        console.error("Status poll error:", err);
+        throw new Error("Failed to check analysis status");
+      }
+    }
+
+    throw new Error("Analysis is taking longer than expected. Please check back later.");
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -79,7 +127,15 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
       "text/csv": [".csv"],
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
     },
-    maxSize: 30 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024, // 10MB limit to match backend
+    onDropRejected: (fileRejections) => {
+      const error = fileRejections[0]?.errors[0];
+      if (error?.code === "file-too-large") {
+        setUploadError("File is too large. Maximum size is 10MB. Please upload a smaller file or sample data.");
+      } else {
+        setUploadError(error?.message || "File rejected");
+      }
+    },
   });
 
   return (
@@ -115,12 +171,16 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         disabled={uploading}
       >
         <Zap className="mr-2 h-5 w-5" />
-        {uploading ? "Uploading..." : "Browse Files"}
+        {uploading ? (processingStatus || "Uploading...") : "Browse Files"}
         <Shield className="ml-2 h-4 w-4" />
       </Button>
 
       {uploadError && (
         <p className="text-red-500 text-sm mt-2">{uploadError}</p>
+      )}
+      
+      {processingStatus && !uploadError && (
+        <p className="text-blue-600 text-sm mt-2 animate-pulse">{processingStatus}</p>
       )}
 
       <div className="flex items-center justify-center space-x-6 text-sm font-medium">
@@ -133,7 +193,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           XLSX
         </div>
       </div>
-      <p className="text-xs text-slate-500 mt-2">Maximum file size: 30MB</p>
+      <p className="text-xs text-slate-500 mt-2">Maximum file size: 10MB</p>
     </div>
   );
 }

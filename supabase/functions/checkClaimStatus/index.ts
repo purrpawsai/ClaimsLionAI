@@ -18,38 +18,57 @@ serve(async (req) => {
       headers: corsHeaders,
     });
   }
-  const supabase = createClient(
-    Deno.env.get("PROJECT_URL")!,
-    Deno.env.get("SERVICE_ROLE_KEY")!
-  );
+  
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error("Missing Supabase environment variables");
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  const { analysisId } = await req.json();
-  if (!analysisId) return new Response(JSON.stringify({ error: "Missing analysisId" }), { 
-    status: 400,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    const { analysisId } = await req.json();
+    if (!analysisId) {
+      return new Response(JSON.stringify({ error: "Missing analysisId" }), { 
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  const { data, error } = await supabase
-    .from("analysis_results")
-    .select("status")
-    .eq("id", analysisId)
-    .single();
+    const { data, error } = await supabase
+      .from("analysis_results")
+      .select("status")
+      .eq("id", analysisId)
+      .single();
 
-  if (error || !data) return new Response(JSON.stringify({ error: "Analysis not found" }), { 
-    status: 404,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    if (error || !data) {
+      return new Response(JSON.stringify({ error: "Analysis not found" }), { 
+        status: 404,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      });
+    }
 
-  return new Response(JSON.stringify({ status: data.status }), {
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+    return new Response(JSON.stringify({ status: data.status }), {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Unexpected server error", details: err.message }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  }
 });
