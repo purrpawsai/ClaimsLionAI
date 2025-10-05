@@ -26,9 +26,9 @@ serve(async (req) => {
     Deno.env.get("SERVICE_ROLE_KEY")!
   );
 
-  const { fileUrl, region } = await req.json();
-  if (!fileUrl || !region) {
-    return new Response(JSON.stringify({ error: "Missing fields" }), { 
+  const { fileUrl } = await req.json();
+  if (!fileUrl) {
+    return new Response(JSON.stringify({ error: "Missing fileUrl" }), { 
       status: 400,
       headers: {
         ...corsHeaders,
@@ -37,18 +37,19 @@ serve(async (req) => {
     });
   }
 
-  // 1. Create pending conversation entry
-  const convoInsert = await supabase.from("claims_conversations").insert({
-    region,
+  // 1. Create pending analysis entry
+  const analysisInsert = await supabase.from("analysis_results").insert({
+    filename: fileUrl.split('/').pop() || 'unknown',
     file_url: fileUrl,
-    messages: [],
-    last_ai_response: null,
+    json_response: {},
     status: "pending",
+    analysis_summary: null,
+    started_processing_at: new Date().toISOString(),
   }).select("id").single();
 
-  const convoId = convoInsert.data?.id;
-  if (!convoId) {
-    return new Response(JSON.stringify({ error: "Failed to create conversation" }), { 
+  const analysisId = analysisInsert.data?.id;
+  if (!analysisId) {
+    return new Response(JSON.stringify({ error: "Failed to create analysis entry" }), { 
       status: 500,
       headers: {
         ...corsHeaders,
@@ -86,20 +87,49 @@ serve(async (req) => {
     }),
   });
 
+  if (!claudeRes.ok) {
+    const errorText = await claudeRes.text();
+    console.error("Claude API error:", errorText);
+    
+    // Update analysis with error
+    await supabase.from("analysis_results")
+      .update({
+        status: "error",
+        error_message: `Claude API error: ${errorText}`,
+      })
+      .eq("id", analysisId);
+    
+    return new Response(JSON.stringify({ error: "Claude API failed", details: errorText }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
+  }
+
   const { content } = await claudeRes.json();
   const aiReply = content?.[0]?.text || "";
-  const finalMessages = [userMessage, { role: "assistant", content: aiReply }];
+  
+  // Parse the AI response as JSON
+  let parsedResponse;
+  try {
+    parsedResponse = JSON.parse(aiReply);
+  } catch (e) {
+    parsedResponse = { error: "Failed to parse AI response", raw_response: aiReply };
+  }
 
-  // 5. Update conversation with AI response
-  await supabase.from("claims_conversations")
+  // 5. Update analysis with AI response
+  await supabase.from("analysis_results")
     .update({
-      messages: finalMessages,
-      last_ai_response: aiReply,
+      json_response: parsedResponse,
       status: "complete",
+      analysis_summary: aiReply.substring(0, 500), // First 500 chars as summary
+      analyzed_at: new Date().toISOString(),
     })
-    .eq("id", convoId);
+    .eq("id", analysisId);
 
-  return new Response(JSON.stringify({ convoId, result: aiReply }), {
+  return new Response(JSON.stringify({ analysisId, result: aiReply }), {
     headers: {
       ...corsHeaders,
       "Content-Type": "application/json",

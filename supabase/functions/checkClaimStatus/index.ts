@@ -23,8 +23,8 @@ serve(async (req) => {
     Deno.env.get("SERVICE_ROLE_KEY")!
   );
 
-  const { convoId } = await req.json();
-  if (!convoId) return new Response(JSON.stringify({ error: "Missing convoId" }), { 
+  const { analysisId } = await req.json();
+  if (!analysisId) return new Response(JSON.stringify({ error: "Missing analysisId" }), { 
     status: 400,
     headers: {
       ...corsHeaders,
@@ -33,12 +33,12 @@ serve(async (req) => {
   });
 
   const { data, error } = await supabase
-    .from("claims_conversations")
+    .from("analysis_results")
     .select("status")
-    .eq("id", convoId)
+    .eq("id", analysisId)
     .single();
 
-  if (error || !data) return new Response(JSON.stringify({ error: "Conversation not found" }), { 
+  if (error || !data) return new Response(JSON.stringify({ error: "Analysis not found" }), { 
     status: 404,
     headers: {
       ...corsHeaders,

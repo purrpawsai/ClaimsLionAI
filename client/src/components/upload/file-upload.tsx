@@ -49,7 +49,7 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ fileUrl, analysisId }),
+        body: JSON.stringify({ fileUrl }),
       });
 
       if (!processRes.ok) {
@@ -57,11 +57,13 @@ export function FileUpload({ onUploadComplete }: FileUploadProps) {
         throw new Error(`Failed to trigger analysis: ${errorText}`);
       }
 
+      const { analysisId: returnedAnalysisId } = await processRes.json();
+
       // 3️⃣ Callback or navigation
       if (onUploadComplete) {
-        onUploadComplete(analysisId);
+        onUploadComplete(returnedAnalysisId);
       } else {
-        navigate(`/progress/${analysisId}`);
+        navigate(`/progress/${returnedAnalysisId}`);
       }
     } catch (err: any) {
       console.error("Upload error:", err);
