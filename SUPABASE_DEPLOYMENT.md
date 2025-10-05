@@ -30,12 +30,22 @@ supabase functions deploy process-analysis
 
 ## **Step 5: Set Environment Variables**
 
+### **For Supabase Edge Functions:**
 In your Supabase dashboard:
 1. Go to Settings → Edge Functions
 2. Add these environment variables:
-   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `CLAUDE_API_KEY` - Your Claude API key
    - `SUPABASE_URL` - Your Supabase URL
    - `SUPABASE_SERVICE_ROLE_KEY` - Your service role key
+
+### **For Local Development:**
+Create a `.env` file in the `server/` directory:
+```env
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+CLAUDE_API_KEY=your_claude_api_key_here
+PORT=3001
+```
 
 ## **Step 6: Test the Function**
 

@@ -50,13 +50,20 @@ cd server
 npm install
 ```
 
-2. **Create `.env` file:**
+2. **Create `.env` file in the `server/` directory:**
 ```bash
-SUPABASE_URL=your_supabase_url
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-CLAUDE_API_KEY=your_claude_api_key
+# Copy this template and replace with your actual values
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+CLAUDE_API_KEY=sk-ant-api03-your-actual-claude-key-here
 PORT=3001
 ```
+
+**Important:** 
+- Replace `your-project-ref` with your actual Supabase project reference
+- Get your service role key from Supabase Dashboard → Settings → API
+- Get your Claude API key from Anthropic Console
+- Never commit the `.env` file to version control
 
 3. **Start the worker:**
 ```bash
